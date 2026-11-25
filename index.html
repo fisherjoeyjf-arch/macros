@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Macros">
+<title>Macros</title>
+<style>
+:root{--bg:#0f1115;--card:#1a1d24;--line:#2a2e38;--text:#f2f3f5;--dim:#9096a3;--accent:#4ade80;--p:#60a5fa;--c:#fbbf24;--f:#f87171}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,system-ui,sans-serif;padding-bottom:80px}
+.top{padding:calc(env(safe-area-inset-top) + 12px) 16px 8px;display:flex;align-items:center;justify-content:space-between}
+.top h1{font-size:20px;margin:0}
+.datebar{display:flex;gap:10px;align-items:center}
+.datebar button{background:var(--card);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:6px 12px;font-size:16px}
+.view{display:none;padding:0 16px}
+.view.on{display:block}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin:10px 0}
+.card h3{margin:0 0 8px;font-size:14px;color:var(--dim);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.big{font-size:34px;font-weight:700}
+.dim{color:var(--dim);font-size:13px}
+.bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin:6px 0 10px}
+.bar>i{display:block;height:100%;background:var(--accent);width:0}
+.row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:0}
+.row .n{font-size:15px}
+.row .m{font-size:12px;color:var(--dim)}
+.btn{background:var(--accent);color:#06210f;border:0;border-radius:10px;padding:12px 16px;font-size:16px;font-weight:600;width:100%;margin-top:8px}
+.btn.alt{background:var(--card);color:var(--text);border:1px solid var(--line)}
+.btn.sm{width:auto;padding:6px 12px;font-size:14px;margin:0}
+input,select{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:11px;font-size:16px;margin:4px 0}
+label{font-size:12px;color:var(--dim)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.tabs{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--line);display:flex;padding-bottom:env(safe-area-inset-bottom)}
+.tabs button{flex:1;background:none;border:0;color:var(--dim);padding:14px 0;font-size:13px}
+.tabs button.on{color:var(--accent)}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:flex-end;z-index:50}
+.modal.on{display:flex}
+.sheet{background:var(--bg);width:100%;max-height:92vh;overflow:auto;border-radius:18px 18px 0 0;padding:16px 16px 30px}
+.chip{display:inline-block;background:var(--line);border-radius:12px;padding:3px 9px;font-size:12px;margin-right:4px}
+.mp{color:var(--p)}.mc{color:var(--c)}.mf{color:var(--f)}
+#video{width:100%;border-radius:12px;background:#000}
+canvas{max-width:100%}
+</style>
+</head>
+<body>
+<div class="top"><h1 id="title">Today</h1><div class="datebar"><button onclick="shiftDay(-1)">‹</button><button onclick="shiftDay(1)">›</button></div></div>
+
+<div id="v-today" class="view on"></div>
+<div id="v-foods" class="view"></div>
+<div id="v-weight" class="view"></div>
+<div id="v-plan" class="view"></div>
+
+<div class="tabs">
+<button class="on" data-t="today">Diary</button>
+<button data-t="foods">Foods</button>
+<button data-t="weight">Weight</button>
+<button data-t="plan">Plan</button>
+</div>
+
+<div id="modal" class="modal"><div class="sheet" id="sheet"></div></div>
+
+<script>
+// ---------- Database (localStorage, stays on your phone) ----------
+const DB_KEY='macroTrackerV1';
+let db=load();
+function load(){
+  try{const d=JSON.parse(localStorage.getItem(DB_KEY));if(d)return d}catch(e){}
+  return{foods:[],log:{},weights:{},goal:{type:'cut',rate:0.5,cal:2200,p:180,c:200,f:70,startTDEE:2500,height:70,age:30,sex:'m',activity:1.4,units:'lb'},tdeeHistory:[]};
+}
+function save(){localStorage.setItem(DB_KEY,JSON.stringify(db))}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
+function dkey(d){const z=new Date(d.getTime()-d.getTimezoneOffset()*60000);return z.toISOString().slice(0,10)}
+let curDate=new Date();
+function shiftDay(n){curDate=new Date(curDate.getTime()+n*86400000);render()}
+function $(id){return document.getElementById(id)}
+function r(n){return Math.round(n)}
+</script>
+
+
+
+
+
+
+// ---------- Tabs and rendering ----------
+let tab='today';
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{tab=b.dataset.t;document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x===b));render()});
+function render(){
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on',v.id==='v-'+tab));
+  const isToday=dkey(curDate)===dkey(new Date());
+  $('title').textContent=tab==='today'?(isToday?'Today':curDate.toDateString().slice(0,10)):tab[0].toUpperCase()+tab.slice(1);
+  if(tab==='today')renderToday();
+  if(tab==='foods')renderFoods();
+  if(tab==='weight')renderWeight();
+  if(tab==='plan')renderPlan();
+}
+function openSheet(html){$('sheet').innerHTML=html;$('modal').classList.add('on')}
+function closeSheet(){stopScan();$('modal').classList.remove('on')}
+$('modal').addEventListener('click',e=>{if(e.target.id==='modal')closeSheet()});
+
+// ---------- Diary ----------
+function dayLog(){return db.log[dkey(curDate)]||(db.log[dkey(curDate)]=[])}
+function totals(entries){
+  const t={cal:0,p:0,c:0,f:0};
+  entries.forEach(e=>{t.cal+=e.cal;t.p+=e.p;t.c+=e.c;t.f+=e.f});
+  return t;
+}
+function pct(a,b){return Math.min(100,b?a/b*100:0)}
+function macroBar(label,val,goal,color){
+  return `<div class="dim">${label}: ${r(val)} / ${r(goal)} g</div><div class="bar"><i style="width:${pct(val,goal)}%;background:${color}"></i></div>`;
+}
+function renderToday(){
+  const entries=dayLog(), t=totals(entries), g=db.goal;
+  const left=g.cal-t.cal;
+  let h=`<div class="card"><h3>Calories</h3><div class="big">${r(t.cal)} <span class="dim">/ ${r(g.cal)}</span></div>
+  <div class="bar"><i style="width:${pct(t.cal,g.cal)}%"></i></div>
+  <div class="dim">${left>=0?r(left)+' left':r(-left)+' over'}</div></div>
+  <div class="card">${macroBar('Protein',t.p,g.p,'var(--p)')}${macroBar('Carbs',t.c,g.c,'var(--c)')}${macroBar('Fat',t.f,g.f,'var(--f)')}</div>
+  <div class="card"><h3>Logged</h3>`;
+  if(!entries.length)h+='<div class="dim">Nothing logged yet.</div>';
+  entries.forEach((e,i)=>{
+    h+=`<div class="row"><div><div class="n">${esc(e.name)}</div><div class="m">${e.qty} ${esc(e.unit)} · <span class="mp">P${r(e.p)}</span> <span class="mc">C${r(e.c)}</span> <span class="mf">F${r(e.f)}</span></div></div>
+    <div>${r(e.cal)} <button class="btn sm alt" onclick="delEntry(${i})">✕</button></div></div>`;
+  });
+  h+=`</div><button class="btn" onclick="openAdd()">+ Add food</button><button class="btn alt" onclick="openQuick()">Quick add calories</button>`;
+  $('v-today').innerHTML=h;
+}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function delEntry(i){dayLog().splice(i,1);save();render()}
+
+// ---------- Add food sheet ----------
+function openAdd(){
+  openSheet(`<h2 style="margin-top:0">Add food</h2>
+  <div class="grid2"><button class="btn" onclick="openScan()">Scan barcode</button><button class="btn alt" onclick="openLabel()">Scan label</button></div>
+  <input id="q" placeholder="Search your foods or Open Food Facts" oninput="doSearch()">
+  <div id="results"></div>
+  <button class="btn alt" onclick="openNewFood()">Create custom food</button>`);
+  doSearch();
+}
+let searchTimer;
+function doSearch(){
+  const q=($('q')?.value||'').trim().toLowerCase();
+  let h='';
+  const mine=db.foods.filter(f=>!q||f.name.toLowerCase().includes(q)).slice(0,30);
+  mine.forEach(f=>{h+=foodRow(f)});
+  $('results').innerHTML=h||'<div class="dim">No saved foods match.</div>';
+  clearTimeout(searchTimer);
+  if(q.length>=3){searchTimer=setTimeout(()=>searchOFF(q),500)}
+}
+function foodRow(f){
+  return `<div class="row" onclick="pickFood('${f.id}')"><div><div class="n">${esc(f.name)}</div><div class="m">${esc(f.brand||'')} per ${f.serving} ${esc(f.unit)}</div></div><div>${r(f.cal)}</div></div>`;
+}
+async function searchOFF(q){
+  try{
+    const res=await fetch('https://world.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+'&search_simple=1&action=process&json=1&page_size=15&fields=code,product_name,brands,nutriments,serving_quantity');
+    const d=await res.json();
+    if(($('q')?.value||'').trim().toLowerCase()!==q)return;
+    let h='';
+    (d.products||[]).forEach(p=>{const f=offToFood(p);if(f){offCache[f.id]=f;h+=`<div class="row" onclick="pickOff('${f.id}')"><div><div class="n">${esc(f.name)}</div><div class="m">${esc(f.brand||'')} per ${f.serving} ${esc(f.unit)} · online</div></div><div>${r(f.cal)}</div></div>`}});
+    $('results').insertAdjacentHTML('beforeend',h);
+  }catch(e){}
+}
+const offCache={};
+function offToFood(p){
+  const n=p.nutriments||{};
+  if(!p.product_name||n['energy-kcal_100g']==null)return null;
+  const sv=parseFloat(p.serving_quantity)||100;
+  const k=sv/100;
+  return{id:'off'+p.code,name:p.product_name,brand:p.brands||'',serving:sv,unit:'g',
+    cal:(n['energy-kcal_100g']||0)*k,p:(n.proteins_100g||0)*k,c:(n.carbohydrates_100g||0)*k,f:(n.fat_100g||0)*k,barcode:p.code};
+}
+function pickOff(id){const f=offCache[id];if(!f)return;if(!db.foods.find(x=>x.id===f.id)){db.foods.push(f);save()}pickFood(f.id)}
+
+function pickFood(id){
+  const f=db.foods.find(x=>x.id===id);if(!f)return;
+  openSheet(`<h2 style="margin-top:0">${esc(f.name)}</h2>
+  <div class="dim">${esc(f.brand||'')} · ${r(f.cal)} cal per ${f.serving} ${esc(f.unit)}</div>
+  <label>Amount (${esc(f.unit)})</label><input id="amt" type="number" inputmode="decimal" value="${f.serving}" oninput="prevAmt('${f.id}')">
+  <div id="prev" class="card"></div>
+  <button class="btn" onclick="logFood('${f.id}')">Log it</button>
+  <button class="btn alt" onclick="openAdd()">Back</button>`);
+  prevAmt(id);
+}
+function prevAmt(id){
+  const f=db.foods.find(x=>x.id===id),a=parseFloat($('amt').value)||0,k=a/f.serving;
+  $('prev').innerHTML=`${r(f.cal*k)} cal · <span class="mp">P ${r(f.p*k)}</span> <span class="mc">C ${r(f.c*k)}</span> <span class="mf">F ${r(f.f*k)}</span>`;
+}
+function logFood(id){
+  const f=db.foods.find(x=>x.id===id),a=parseFloat($('amt').value)||0,k=a/f.serving;
+  dayLog().push({name:f.name,qty:a,unit:f.unit,cal:f.cal*k,p:f.p*k,c:f.c*k,f:f.f*k});
+  save();closeSheet();render();
+}
+function openQuick(){
+  openSheet(`<h2 style="margin-top:0">Quick add</h2>
+  <label>Name</label><input id="qn" placeholder="Quick add">
+  <div class="grid2"><div><label>Calories</label><input id="qc" type="number" inputmode="decimal"></div><div><label>Protein g</label><input id="qp" type="number" inputmode="decimal"></div><div><label>Carbs g</label><input id="qcb" type="number" inputmode="decimal"></div><div><label>Fat g</label><input id="qf" type="number" inputmode="decimal"></div></div>
+  <button class="btn" onclick="saveQuick()">Log it</button>`);
+}
+function saveQuick(){
+  const p=parseFloat($('qp').value)||0,c=parseFloat($('qcb').value)||0,f=parseFloat($('qf').value)||0;
+  let cal=parseFloat($('qc').value);if(isNaN(cal))cal=p*4+c*4+f*9;
+  dayLog().push({name:$('qn').value||'Quick add',qty:1,unit:'entry',cal,p,c,f});
+  save();closeSheet();render();
+}
+
+// ---------- Custom foods ----------
+function openNewFood(prefill){
+  const x=prefill||{};
+  openSheet(`<h2 style="margin-top:0">${x.id?'Edit':'New'} food</h2>
+  <label>Name</label><input id="fn" value="${esc(x.name||'')}">
+  <label>Brand (optional)</label><input id="fb" value="${esc(x.brand||'')}">
+  <div class="grid2"><div><label>Serving size</label><input id="fs" type="number" inputmode="decimal" value="${x.serving||100}"></div><div><label>Unit</label><input id="fu" value="${esc(x.unit||'g')}"></div></div>
+  <div class="grid2"><div><label>Calories</label><input id="fc" type="number" inputmode="decimal" value="${x.cal??''}"></div><div><label>Protein g</label><input id="fp" type="number" inputmode="decimal" value="${x.p??''}"></div><div><label>Carbs g</label><input id="fcb" type="number" inputmode="decimal" value="${x.c??''}"></div><div><label>Fat g</label><input id="ff" type="number" inputmode="decimal" value="${x.f??''}"></div></div>
+  <input type="hidden" id="fid" value="${x.id||''}"><input type="hidden" id="fbc" value="${esc(x.barcode||'')}">
+  <button class="btn" onclick="saveFood()">Save food</button>`);
+}
+function saveFood(){
+  const id=$('fid').value||uid();
+  const food={id,name:$('fn').value||'Food',brand:$('fb').value,serving:parseFloat($('fs').value)||100,unit:$('fu').value||'g',
+    cal:parseFloat($('fc').value)||0,p:parseFloat($('fp').value)||0,c:parseFloat($('fcb').value)||0,f:parseFloat($('ff').value)||0,barcode:$('fbc').value};
+  const i=db.foods.findIndex(x=>x.id===id);
+  if(i>=0)db.foods[i]=food;else db.foods.push(food);
+  save();closeSheet();render();
+}
+function renderFoods(){
+  let h='<button class="btn" onclick="openNewFood()">+ New food</button><div class="card"><h3>My foods</h3>';
+  if(!db.foods.length)h+='<div class="dim">No saved foods yet.</div>';
+  db.foods.forEach(f=>{h+=`<div class="row"><div onclick="editFood('${f.id}')"><div class="n">${esc(f.name)}</div><div class="m">${esc(f.brand||'')} per ${f.serving} ${esc(f.unit)} · ${r(f.cal)} cal</div></div><button class="btn sm alt" onclick="delFood('${f.id}')">✕</button></div>`});
+  $('v-foods').innerHTML=h+'</div>';
+}
+function editFood(id){openNewFood(db.foods.find(x=>x.id===id))}
+function delFood(id){db.foods=db.foods.filter(x=>x.id!==id);save();render()}
+
+
+
+
+
+
+
+// ---------- Barcode scanner ----------
+let stream=null,scanLoop=null;
+function stopScan(){
+  if(scanLoop){cancelAnimationFrame(scanLoop);scanLoop=null}
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}
+}
+function loadScript(src){
+  return new Promise((res,rej)=>{
+    if(document.querySelector('script[src="'+src+'"]'))return res();
+    const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s);
+  });
+}
+async function openScan(){
+  openSheet(`<h2 style="margin-top:0">Scan barcode</h2>
+  <video id="video" playsinline muted></video>
+  <div id="scanmsg" class="dim">Point the camera at a barcode.</div>
+  <div class="dim" style="margin-top:10px">Or type the numbers:</div>
+  <input id="manualcode" inputmode="numeric" placeholder="Barcode number">
+  <button class="btn alt" onclick="lookupBarcode($('manualcode').value.trim())">Look up</button>
+  <button class="btn alt" onclick="openAdd()">Back</button>`);
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    const v=$('video');v.srcObject=stream;await v.play();
+    let detector=null;
+    if('BarcodeDetector' in window){
+      detector=new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e','code_128']});
+    }else{
+      await loadScript('https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js');
+    }
+    let zx=null;
+    if(!detector){zx=new ZXing.BrowserMultiFormatReader()}
+    const canvas=document.createElement('canvas');
+    let busy=false,done=false;
+    const tick=async()=>{
+      if(done||!stream)return;
+      if(!busy&&v.videoWidth){
+        busy=true;
+        try{
+          let code=null;
+          if(detector){
+            const found=await detector.detect(v);
+            if(found.length)code=found[0].rawValue;
+          }else{
+            canvas.width=v.videoWidth;canvas.height=v.videoHeight;
+            canvas.getContext('2d').drawImage(v,0,0);
+            try{const res=await zx.decodeFromCanvas(canvas);code=res.getText()}catch(e){}
+          }
+          if(code){done=true;stopScan();lookupBarcode(code);return}
+        }catch(e){}
+        busy=false;
+      }
+      scanLoop=requestAnimationFrame(tick);
+    };
+    tick();
+  }catch(e){
+    $('scanmsg').textContent='Camera not available. Type the barcode number below instead.';
+  }
+}
+async function lookupBarcode(code){
+  if(!code)return;
+  const local=db.foods.find(f=>f.barcode===code);
+  if(local){pickFood(local.id);return}
+  openSheet('<h2 style="margin-top:0">Looking up '+esc(code)+'...</h2>');
+  try{
+    const res=await fetch('https://world.openfoodfacts.org/api/v2/product/'+encodeURIComponent(code)+'.json');
+    const d=await res.json();
+    if(d.status===1){
+      const f=offToFood(d.product);
+      if(f){f.barcode=code;f.id='off'+code;offCache[f.id]=f;pickOff(f.id);return}
+    }
+  }catch(e){}
+  openSheet(`<h2 style="margin-top:0">Not found</h2><div class="dim">That barcode is not in the online database. You can scan the nutrition label or enter it by hand.</div>
+  <button class="btn" onclick="openLabel('${esc(code)}')">Scan label</button>
+  <button class="btn alt" onclick="openNewFood({barcode:'${esc(code)}'})">Enter by hand</button>`);
+}
+
+// ---------- Nutrition label reader (no AI, plain text recognition) ----------
+function openLabel(barcode){
+  openSheet(`<h2 style="margin-top:0">Scan nutrition label</h2>
+  <div class="dim">Take a clear, flat, well lit photo of just the nutrition facts panel. You will be able to fix any numbers before saving.</div>
+  <input id="labelfile" type="file" accept="image/*" capture="environment">
+  <div id="labelmsg" class="dim"></div>
+  <button class="btn alt" onclick="openAdd()">Back</button>`);
+  $('labelfile').onchange=e=>{if(e.target.files[0])readLabel(e.target.files[0],barcode||'')};
+}
+async function readLabel(file,barcode){
+  const msg=$('labelmsg');
+  msg.textContent='Loading text reader...';
+  try{
+    await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js');
+    msg.textContent='Reading label, this can take 10 to 20 seconds...';
+    const url=URL.createObjectURL(file);
+    const result=await Tesseract.recognize(url,'eng');
+    const parsed=parseLabel(result.data.text);
+    parsed.barcode=barcode;
+    openNewFood(parsed);
+    const note=document.createElement('div');
+    note.className='dim';note.style.margin='8px 0';
+    note.textContent='Check these numbers against the label before saving. Reading can be off.';
+    $('sheet').insertBefore(note,$('sheet').children[1]);
+  }catch(e){
+    msg.textContent='Could not read the label. Try a clearer photo or enter it by hand.';
+  }
+}
+function parseLabel(text){
+  const t=text.replace(/[|]/g,'l').replace(/\r/g,'');
+  const lines=t.split('\n').map(l=>l.trim()).filter(Boolean);
+  function numAfter(re){
+    for(const l of lines){
+      const m=l.match(re);
+      if(m){
+        const n=l.slice(m.index+m[0].length).match(/(\d+(?:[.,]\d+)?)\s*(g|mg|mcg)?/i);
+        if(n)return parseFloat(n[1].replace(',','.'));
+      }
+    }
+    return null;
+  }
+  let cal=null;
+  for(const l of lines){
+    const m=l.match(/calories\D{0,6}(\d{2,4})/i);
+    if(m){cal=parseFloat(m[1]);break}
+  }
+  const p=numAfter(/protein/i),c=numAfter(/total\s*carb\w*|carbohydrate/i),f=numAfter(/total\s*fat/i);
+  let serving=100,unit='g';
+  for(const l of lines){
+    const m=l.match(/serving\s*size.*?(\d+(?:\.\d+)?)\s*(g|ml|oz)\b/i)||l.match(/\((\d+(?:\.\d+)?)\s*(g|ml)\)/i);
+    if(m){serving=parseFloat(m[1]);unit=m[2].toLowerCase();break}
+  }
+  return{name:'Scanned food',serving,unit,cal:cal??'',p:p??'',c:c??'',f:f??''};
+}
+
+
+
+
+
+
+// ---------- Weight tracking and trend ----------
+function lbs(w){return db.goal.units==='kg'?w*2.20462:w}
+function fromLbs(w){return db.goal.units==='kg'?w/2.20462:w}
+function weightSeries(){
+  // returns sorted [{date, w, trend}] using an exponentially smoothed trend
+  const days=Object.keys(db.weights).sort();
+  const out=[];let trend=null;
+  days.forEach(d=>{
+    const w=db.weights[d];
+    trend=trend===null?w:trend+0.1*(w-trend);
+    out.push({date:d,w,trend});
+  });
+  return out;
+}
+function renderWeight(){
+  const s=weightSeries(),u=db.goal.units;
+  const today=dkey(curDate);
+  let h=`<div class="card"><h3>Log weight (${u})</h3>
+  <input id="wv" type="number" inputmode="decimal" step="0.1" placeholder="${s.length?s[s.length-1].w.toFixed(1):'Weight'}" value="${db.weights[today]??''}">
+  <button class="btn" onclick="saveWeight()">Save for ${today}</button></div>`;
+  if(s.length){
+    const last=s[s.length-1];
+    h+=`<div class="card"><h3>Trend weight</h3><div class="big">${last.trend.toFixed(1)} <span class="dim">${u}</span></div>
+    <div class="dim">Latest scale reading ${last.w.toFixed(1)} ${u}</div><canvas id="wchart" height="180"></canvas></div>`;
+  }
+  $('v-weight').innerHTML=h;
+  if(s.length>1)drawChart(s.slice(-60));
+}
+function saveWeight(){
+  const v=parseFloat($('wv').value);
+  if(!v)return;
+  db.weights[dkey(curDate)]=v;save();render();
+}
+function drawChart(s){
+  const cv=$('wchart');if(!cv)return;
+  const W=cv.width=cv.parentElement.clientWidth-28,H=cv.height=180;
+  const ctx=cv.getContext('2d');
+  const vals=s.flatMap(p=>[p.w,p.trend]);
+  const mn=Math.min(...vals)-1,mx=Math.max(...vals)+1;
+  const x=i=>10+i*(W-20)/Math.max(1,s.length-1);
+  const y=v=>H-10-(v-mn)/(mx-mn)*(H-20);
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#9096a3';
+  s.forEach((p,i)=>{ctx.beginPath();ctx.arc(x(i),y(p.w),3,0,7);ctx.fill()});
+  ctx.strokeStyle='#4ade80';ctx.lineWidth=3;ctx.beginPath();
+  s.forEach((p,i)=>{i?ctx.lineTo(x(i),y(p.trend)):ctx.moveTo(x(i),y(p.trend))});
+  ctx.stroke();
+}
+
+// ---------- Adaptive energy expenditure ----------
+// Idea: energy balance. If your trend weight changed by X pounds over the window
+// and you ate an average of I calories a day, then
+// TDEE = I - (weight change in lb * 3500 / days).
+function estimateTDEE(){
+  const s=weightSeries();
+  if(s.length<2)return null;
+  const end=new Date(s[s.length-1].date),start=new Date(end.getTime()-21*86400000);
+  const win=s.filter(p=>new Date(p.date)>=start);
+  if(win.length<2)return null;
+  const first=win[0],last=win[win.length-1];
+  const days=(new Date(last.date)-new Date(first.date))/86400000;
+  if(days<10)return null;
+  // average intake over days that were actually logged
+  let sum=0,n=0;
+  for(let d=new Date(first.date);d<=new Date(last.date);d=new Date(d.getTime()+86400000)){
+    const e=db.log[dkey(new Date(d.getTime()+d.getTimezoneOffset()*60000))];
+    if(e&&e.length){sum+=totals(e).cal;n++}
+  }
+  if(n<Math.ceil(days*0.7))return null;
+  const avgIn=sum/n;
+  const dLb=lbs(last.trend)-lbs(first.trend);
+  return avgIn-(dLb*3500/days);
+}
+function startingTDEE(){
+  const g=db.goal,w=lbs((weightSeries().slice(-1)[0]||{trend:180}).trend)/2.20462;
+  const bmr=10*w+6.25*g.height*2.54-5*g.age+(g.sex==='m'?5:-161);
+  return bmr*g.activity;
+}
+function currentTDEE(){
+  const est=estimateTDEE();
+  const base=db.goal.startTDEE||startingTDEE();
+  if(est===null)return{tdee:base,source:'starting estimate'};
+  // blend gently so one noisy week does not swing everything
+  const blended=base*0.5+est*0.5;
+  return{tdee:blended,source:'learned from your data'};
+}
+function applyTargets(){
+  const g=db.goal,t=currentTDEE().tdee;
+  const rateCal=(g.rate*3500)/7; // lb per week to daily cal
+  let cal=g.type==='cut'?t-rateCal:g.type==='gain'?t+rateCal:t;
+  cal=Math.max(1200,cal);
+  g.startTDEE=t;
+  g.cal=r(cal);
+  const w=lbs((weightSeries().slice(-1)[0]||{trend:180}).trend);
+  g.p=r(Math.min(w*1.0,cal*0.4/4));
+  g.f=r(cal*0.25/9);
+  g.c=Math.max(0,r((cal-g.p*4-g.f*9)/4));
+  db.tdeeHistory.push({date:dkey(new Date()),tdee:r(t)});
+  save();
+}
+
+// ---------- Plan screen ----------
+function renderPlan(){
+  const g=db.goal,cur=currentTDEE();
+  const hist=db.tdeeHistory.slice(-5).map(h=>`<div class="row"><div class="n">${h.date}</div><div>${h.tdee}</div></div>`).join('');
+  $('v-plan').innerHTML=`<div class="card"><h3>Estimated maintenance</h3>
+  <div class="big">${r(cur.tdee)} <span class="dim">cal/day</span></div><div class="dim">${cur.source}</div></div>
+  <div class="card"><h3>Goal</h3>
+  <label>Goal type</label><select id="gt"><option value="cut"${g.type==='cut'?' selected':''}>Lose weight</option><option value="maintain"${g.type==='maintain'?' selected':''}>Maintain</option><option value="gain"${g.type==='gain'?' selected':''}>Gain weight</option></select>
+  <label>Rate (lb per week)</label><input id="gr" type="number" step="0.1" inputmode="decimal" value="${g.rate}">
+  <div class="grid3"><div><label>Height (in)</label><input id="gh" type="number" inputmode="decimal" value="${g.height}"></div><div><label>Age</label><input id="ga" type="number" inputmode="decimal" value="${g.age}"></div><div><label>Sex</label><select id="gs"><option value="m"${g.sex==='m'?' selected':''}>M</option><option value="f"${g.sex==='f'?' selected':''}>F</option></select></div></div>
+  <label>Activity multiplier</label><select id="gact">${[[1.2,'Sedentary'],[1.4,'Light'],[1.55,'Moderate'],[1.75,'Very active']].map(a=>`<option value="${a[0]}"${g.activity==a[0]?' selected':''}>${a[1]}</option>`).join('')}</select>
+  <label>Units</label><select id="gu"><option value="lb"${g.units==='lb'?' selected':''}>lb</option><option value="kg"${g.units==='kg'?' selected':''}>kg</option></select>
+  <button class="btn" onclick="savePlan()">Save and recalculate targets</button></div>
+  <div class="card"><h3>Current targets</h3><div>${g.cal} cal · P ${g.p} · C ${g.c} · F ${g.f}</div>
+  <button class="btn alt" onclick="applyTargets();render()">Recalculate from my data now</button></div>
+  <div class="card"><h3>Maintenance history</h3>${hist||'<div class="dim">Nothing yet.</div>'}</div>
+  <div class="card"><h3>Backup</h3><button class="btn alt" onclick="exportData()">Export data</button>
+  <label style="display:block;margin-top:8px">Import data</label><input type="file" accept=".json" onchange="importData(event)"></div>`;
+}
+function savePlan(){
+  const g=db.goal;
+  g.type=$('gt').value;g.rate=parseFloat($('gr').value)||0;g.height=parseFloat($('gh').value)||70;
+  g.age=parseFloat($('ga').value)||30;g.sex=$('gs').value;g.activity=parseFloat($('gact').value);g.units=$('gu').value;
+  g.startTDEE=null;
+  applyTargets();render();
+}
+
+// ---------- Weekly auto-adjust and backup ----------
+function weeklyCheck(){
+  const last=db.tdeeHistory.slice(-1)[0];
+  const due=!last||(new Date()-new Date(last.date))/86400000>=7;
+  if(due&&Object.keys(db.weights).length>=2)applyTargets();
+}
+function exportData(){
+  const blob=new Blob([JSON.stringify(db)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='macro-backup.json';a.click();
+}
+function importData(e){
+  const f=e.target.files[0];if(!f)return;
+  const rd=new FileReader();
+  rd.onload=()=>{try{db=JSON.parse(rd.result);save();render()}catch(x){alert('That file could not be read.')}};
+  rd.readAsText(f);
+}
+
+// ---------- Start ----------
+weeklyCheck();
+render();
