@@ -47,6 +47,8 @@ canvas{max-width:100%}
 </style>
 </head>
 <body>
+  <script>window.onerror=function(m,s,l){document.body.insertAdjacentHTML('afterbegin','<pre style="color:#f88;padding:12px;white-space:pre-wrap">'+m+' (line '+l+')</pre>')}</script>
+
 <div class="top"><h1 id="title">Today</h1><div class="datebar"><button onclick="shiftDay(-1)">‹</button><button onclick="shiftDay(1)">›</button></div></div>
 
 <div id="v-today" class="view on"></div>
